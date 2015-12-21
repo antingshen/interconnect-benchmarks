@@ -98,11 +98,14 @@ int main (int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     int count = atoi(argv[1]);
 
-    MPI_Datatype byte_x2;
     MPI_Datatype mpi_float = MPI_FLOAT;
     MPI_Datatype mpi_char = MPI_SIGNED_CHAR;
+    MPI_Datatype byte_x2;
+    MPI_Datatype byte_x32;
     MPI_Type_contiguous(2, MPI_BYTE, &byte_x2);
+    MPI_Type_contiguous(32, MPI_BYTE, &byte_x32);
     MPI_Type_commit(&byte_x2);
+    MPI_Type_commit(&byte_x32);
 
     MPI_Op fp16_halfcpp;
     MPI_Op fp16_avx;
@@ -110,11 +113,15 @@ int main (int argc, char **argv)
     MPI_Op fp32_avx;
     MPI_Op nop;
     MPI_Op mpi_sum = MPI_SUM;
+    MPI_Op x32char_sum;
+    MPI_Op x32char_copy;
     MPI_Op_create(&my_fp16_sum, 1, &fp16_halfcpp);
     MPI_Op_create(&my_fp16_sum_avx, 1, &fp16_avx);
     MPI_Op_create(&my_fp32_sum, 1, &fp32_sum);
     MPI_Op_create(&my_fp32_sum_avx, 1, &fp32_avx);
     MPI_Op_create(&my_nop_sum, 1, &nop);
+    MPI_Op_create(&my_x32char_sum, 1, &x32char_sum);
+    MPI_Op_create(&my_x32char_copy, 1, &x32char_copy);
 
     //// FLOAT ////
     struct config conf_fp32_mpisum;
@@ -158,6 +165,21 @@ int main (int argc, char **argv)
     conf_char_mpisum.count = count;
     conf_char_mpisum.elapsed = 0;
 
+    //// PACKED_HALF ////
+    struct config conf_x32char_sum;
+    conf_x32char_sum.datatype = &byte_x32;
+    conf_x32char_sum.op = &x32char_sum;
+    conf_x32char_sum.convert_to_datatype = vec_float_to_x32char;
+    conf_x32char_sum.convert_from_datatype = vec_x32char_to_float;
+    conf_x32char_sum.count = count;
+    conf_x32char_sum.elapsed = 0;
+
+    struct config conf_x32char_nop = conf_x32char_sum;
+    conf_x32char_nop.op = &nop;
+
+    struct config conf_x32char_copy = conf_x32char_sum;
+    conf_x32char_copy.op = &x32char_copy;
+
     struct config configs[] = {
       conf_fp32_mpisum,
       conf_fp32_sum,
@@ -166,9 +188,12 @@ int main (int argc, char **argv)
       conf_fp16_halfcpp,
       conf_fp16_avx,
       conf_fp16_nop,
-      conf_char_mpisum
+      conf_char_mpisum,
+      conf_x32char_sum,
+      conf_x32char_nop,
+      conf_x32char_copy
     };
-    int num_configs = 7;
+    int num_configs = 11;
 
     int nRuns = 100;
     for (int i=0; i<nRuns; i++) {
@@ -176,6 +201,7 @@ int main (int argc, char **argv)
         printf("--- %d ---\n", i);
       }
       for (int c=0; c<num_configs; c++) {
+        // printf("%d\n", configs[c].count);
         configs[c].elapsed += benchmark_allreduce(&configs[c]);
         //verified: all ranks get roughly the same elapsedTime.
         if(rank == 0 && i >= 1 && i % 2 == 0)

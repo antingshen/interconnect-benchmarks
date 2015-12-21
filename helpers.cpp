@@ -83,6 +83,28 @@ void my_nop_sum(void* invec, void* inoutvec, int *len,
   return;
 }
 
+void my_x32char_sum(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  char *in = (char*)invec;
+  char *inout = (char*)inoutvec;
+  for (int i = 0; i < *len*32; i++) {
+      *inout = *in + *inout; 
+      in++;
+      inout++;
+  }
+}
+
+void my_x32char_copy(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  char *in = (char*)invec;
+  char *inout = (char*)inoutvec;
+  for (int i = 0; i < *len*32; i++) {
+      *inout = *in; 
+      in++;
+      inout++;
+  }
+}
+
 
 void* vec_float_to_half(float* vec, int len) {
   half* out = (half*)malloc(len * sizeof(half));
@@ -114,6 +136,28 @@ float* vec_char_to_float(void* v, int len) {
   float* out = (float*)malloc(len * sizeof(float));
   for(int i=0; i<len; i++){
     out[i] = (float)(vec[i]);
+  }
+  return out;
+}
+
+void* vec_float_to_x32char(float* vec, int len) {
+  char* out = (char*)malloc(len * 32 * sizeof(char));
+  for (int i=0; i<len; i++) {
+    for (int j=0; j<32; j++) {
+      out[i*8+j] = (char)(vec[i]);
+    }
+  }
+  return out;
+}
+
+float* vec_x32char_to_float(void* v, int len) {
+  char* vec = (char*) v;
+  float* out = (float*)malloc(len * sizeof(float));
+  for(int i=0; i<len; i++){
+    out[i] = 0;
+    for (int j=0; j<32; j++) {
+      out[i] += (float)(vec[i*8+j]);
+    }
   }
   return out;
 }

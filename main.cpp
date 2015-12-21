@@ -12,8 +12,8 @@ using half_float::half;
 #define USE_FLOAT NULL
 
 struct config {
-  MPI_Datatype datatype;
-  MPI_Op op;
+  MPI_Datatype *datatype;
+  MPI_Op *op;
   int count;
   void* (*convert_to_datatype) (float *vec, int len);
   float* (*convert_from_datatype) (void *vec, int len);
@@ -65,8 +65,8 @@ double benchmark_allreduce(struct config *config) {
   MPI_Allreduce(MPI_IN_PLACE,
       datatype_array,
       config->count,
-      config->datatype,
-      config->op,
+      *config->datatype,
+      *config->op,
       MPI_COMM_WORLD);
   double elapsed_time = MPI_Wtime() - start_time;
 
@@ -148,9 +148,15 @@ int main (int argc, char **argv)
     int count = atoi(argv[1]);
 
     struct config config;
-    MPI_Type_contiguous(2, MPI_BYTE, &config.datatype);
-    MPI_Type_commit(&config.datatype);
-    MPI_Op_create(&my_fp16_sum, 1, &config.op);
+    MPI_Datatype byte_x2;
+    MPI_Type_contiguous(2, MPI_BYTE, &byte_x2);
+    MPI_Type_commit(&byte_x2);
+
+    MPI_Op fp16_halfcpp;
+    MPI_Op_create(&my_fp16_sum, 1, &fp16_halfcpp);
+
+    config.datatype = &byte_x2;
+    config.op = &fp16_halfcpp;
     config.convert_to_datatype = vec_float_to_half;
     config.convert_from_datatype = vec_half_to_float;
 

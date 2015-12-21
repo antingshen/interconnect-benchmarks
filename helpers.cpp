@@ -84,7 +84,7 @@ void my_nop_sum(void* invec, void* inoutvec, int *len,
 }
 
 
-void* vec_float_to_half(float* vec, int len){
+void* vec_float_to_half(float* vec, int len) {
   half* out = (half*)malloc(len * sizeof(half));
   for(int i=0; i<len; i++){
     out[i] = half_cast<half, std::round_to_nearest>(vec[i]);
@@ -92,11 +92,28 @@ void* vec_float_to_half(float* vec, int len){
   return (void*)out;
 }
 
-float* vec_half_to_float(void* v, int len){
+float* vec_half_to_float(void* v, int len) {
   half* vec = (half*) v;
   float* out = (float*)malloc(len * sizeof(float));
   for(int i=0; i<len; i++){
     out[i] = half_cast<int, std::round_to_nearest>(vec[i]);
+  }
+  return out;
+}
+
+void* vec_float_to_char(float* vec, int len) {
+  char* out = (char*)malloc(len * sizeof(char));
+  for (int i=0; i<len; i++) {
+    out[i] = (char)(vec[i]);
+  }
+  return out;
+}
+
+float* vec_char_to_float(void* v, int len) {
+  char* vec = (char*) v;
+  float* out = (float*)malloc(len * sizeof(float));
+  for(int i=0; i<len; i++){
+    out[i] = (float)(vec[i]);
   }
   return out;
 }

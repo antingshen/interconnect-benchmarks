@@ -7,7 +7,7 @@ probSize=13378200 # MB contributed to allreduce by each node
 
 executable=./main
 
-hostfile=hostfiles/firebox_1slot.txt
+hostfile=hostfiles/f1_f2_1slot.txt
 # cat $hostfile
 
 mpirun=/opt/openmpi/bin/mpirun

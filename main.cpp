@@ -10,7 +10,7 @@ using namespace std;
 using half_float::half;
 
 #define USE_FLOAT NULL
-#define CHECK_CORRECTNESS 1
+#define CHECK_CORRECTNESS 0
 
 struct config {
   MPI_Datatype *datatype;
@@ -100,6 +100,7 @@ int main (int argc, char **argv)
 
     MPI_Datatype byte_x2;
     MPI_Datatype mpi_float = MPI_FLOAT;
+    MPI_Datatype mpi_char = MPI_SIGNED_CHAR;
     MPI_Type_contiguous(2, MPI_BYTE, &byte_x2);
     MPI_Type_commit(&byte_x2);
 
@@ -115,6 +116,7 @@ int main (int argc, char **argv)
     MPI_Op_create(&my_fp32_sum_avx, 1, &fp32_avx);
     MPI_Op_create(&my_nop_sum, 1, &nop);
 
+    //// FLOAT ////
     struct config conf_fp32_mpisum;
     conf_fp32_mpisum.datatype = &mpi_float;
     conf_fp32_mpisum.op = &mpi_sum;
@@ -132,6 +134,7 @@ int main (int argc, char **argv)
     struct config conf_fp32_nop = conf_fp32_sum;
     conf_fp32_nop.op = &nop;
 
+    //// HALF ////
     struct config conf_fp16_halfcpp;
     conf_fp16_halfcpp.datatype = &byte_x2;
     conf_fp16_halfcpp.op = &fp16_halfcpp;
@@ -146,16 +149,26 @@ int main (int argc, char **argv)
     struct config conf_fp16_nop = conf_fp16_halfcpp;
     conf_fp16_nop.op = &nop;
 
+    //// CHAR //// 
+    struct config conf_char_mpisum;
+    conf_char_mpisum.datatype = &mpi_char;
+    conf_char_mpisum.op = &mpi_sum;
+    conf_char_mpisum.convert_to_datatype = vec_float_to_char;
+    conf_char_mpisum.convert_from_datatype = vec_char_to_float;
+    conf_char_mpisum.count = count;
+    conf_char_mpisum.elapsed = 0;
+
     struct config configs[] = {
       conf_fp32_mpisum,
       conf_fp32_sum,
       conf_fp32_avx,
-      // conf_fp32_nop,
+      conf_fp32_nop,
       conf_fp16_halfcpp,
-      conf_fp16_avx
-      // conf_fp16_nop
+      conf_fp16_avx,
+      conf_fp16_nop,
+      conf_char_mpisum
     };
-    int num_configs = 5;
+    int num_configs = 7;
 
     int nRuns = 100;
     for (int i=0; i<nRuns; i++) {

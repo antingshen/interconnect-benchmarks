@@ -1,0 +1,97 @@
+
+#include "helpers.h"
+#include "immintrin.h"
+#include "xmmintrin.h"
+#include "emmintrin.h"
+using namespace std;
+using half_float::half;
+using half_float::half_cast;
+//thx: http://stackoverflow.com/questions/29638251/16-bit-float-mpi-reduce
+
+// define custom reduce operation
+void my_fp16_sum(void* invec, void* inoutvec, int *len,
+              MPI_Datatype *datatype) {
+    half* in = (half*)invec;
+    half* inout = (half*)inoutvec;
+    for (int i = 0; i < *len; i++) {
+        *inout = *in + *inout; 
+        in++;
+        inout++;
+    }
+}
+
+void my_fp32_sum(void* invec, void* inoutvec, int *len,
+                  MPI_Datatype *datatype) {
+  float *in = (float*)invec;
+  float *inout = (float*)inoutvec;
+  for (int i = 0; i < *len; i++) {
+      *inout = *in + *inout; 
+      in++;
+      inout++;
+  }
+}
+
+void my_fp16_sum_avx(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  __m128i *in = (__m128i*)invec;
+  __m128i *inout = (__m128i*)inoutvec;
+  __m256 ps1, ps2;
+  __m128i ph_in, ph_inout;
+  int i;
+  for (i = 0; i < *len/8; i++) {
+    ph_in = _mm_loadu_si128(in);
+    ph_inout = _mm_loadu_si128(inout);
+    ps1 = _mm256_cvtph_ps(ph_in);
+    ps2 = _mm256_cvtph_ps(ph_inout);
+    ph_inout = _mm256_cvtps_ph(_mm256_add_ps(ps1, ps2),  (_MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));
+    _mm_storeu_si128(inout, ph_inout);
+    in++;
+    inout++;
+  } 
+  half *in_half = (half*)in;
+  half *inout_half = (half*)inout;
+  for (i = *len/8*8; i < *len; i++) {
+    *inout_half = *in_half + *inout_half;
+    in_half++;
+    inout_half++;
+  }
+}
+
+void my_fp32_sum_avx(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  float *in = (float*)invec;
+  float *inout = (float*)inoutvec;
+  __m256 packed_in, packed_inout;
+  int i;
+  for (i = 0; i < *len/8; i++) {
+    packed_in = _mm256_loadu_ps(in);
+    packed_inout = _mm256_loadu_ps(inout);
+    packed_inout = _mm256_add_ps(packed_in, packed_inout);
+    _mm256_storeu_ps(inout, packed_inout);
+    in += 8;
+    inout += 8;
+  } 
+  for (i = *len/8*8; i < *len; i++) {
+    *inout = *in + *inout;
+    in++;
+    inout++;
+  }
+}
+
+
+half* vec_float_to_half(float* vec, int len){
+  half* out = (half*)malloc(len * sizeof(half));
+  for(int i=0; i<len; i++){
+    out[i] = half_cast<half, std::round_to_nearest>(vec[i]);
+  }
+  return out;
+}
+
+float* vec_half_to_float(half* vec, int len){
+  float* out = (float*)malloc(len * sizeof(float));
+  for(int i=0; i<len; i++){
+    out[i] = half_cast<int, std::round_to_nearest>(vec[i]);
+  }
+  return out;
+}
+

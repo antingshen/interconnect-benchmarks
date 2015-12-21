@@ -79,15 +79,16 @@ void my_fp32_sum_avx(void* invec, void* inoutvec, int *len,
 }
 
 
-half* vec_float_to_half(float* vec, int len){
+void* vec_float_to_half(float* vec, int len){
   half* out = (half*)malloc(len * sizeof(half));
   for(int i=0; i<len; i++){
     out[i] = half_cast<half, std::round_to_nearest>(vec[i]);
   }
-  return out;
+  return (void*)out;
 }
 
-float* vec_half_to_float(half* vec, int len){
+float* vec_half_to_float(void* v, int len){
+  half* vec = (half*) v;
   float* out = (float*)malloc(len * sizeof(float));
   for(int i=0; i<len; i++){
     out[i] = half_cast<int, std::round_to_nearest>(vec[i]);

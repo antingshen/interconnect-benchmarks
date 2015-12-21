@@ -9,7 +9,15 @@
 using namespace std;
 using half_float::half;
 
-MPI_Datatype mpi_type_float16;
+#define USE_FLOAT NULL
+
+struct config {
+  MPI_Datatype datatype;
+  MPI_Op op;
+  int count;
+  void* (*convert_to_datatype) (float *vec, int len);
+  float* (*convert_from_datatype) (void *vec, int len);
+};
 
 void fill_array_deterministic(float* buf, int len){
   int rank, nproc;
@@ -41,59 +49,92 @@ void check_array_deterministic(float* buf, int len){
   }
 }
 
-double benchmark_allreduce_with_correctness_check(int weight_count){
+double benchmark_allreduce(struct config *config) {
+  float* float_array = (float*)malloc(config->count * sizeof(float));
+  fill_array_deterministic(float_array, config->count);
 
-  //verified that the time spent in Malloc is trivial compared to Allreduce.
-  float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
+  void* datatype_array;
+  if (config->convert_to_datatype == USE_FLOAT) {
+    datatype_array = float_array;
+  } else {
+    datatype_array = config->convert_to_datatype(float_array, config->count);
+    free(float_array);
+  }
 
-  double elapsedTime = 0;
-
-  fill_array_deterministic(weight_diff, weight_count);
-
-  double start = MPI_Wtime(); //in seconds
-
-  MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
-      weight_diff, //recv
-      weight_count, //count
-      MPI_FLOAT, 
-      mpi_fp32sum, //op
+  double start_time = MPI_Wtime();
+  MPI_Allreduce(MPI_IN_PLACE,
+      datatype_array,
+      config->count,
+      config->datatype,
+      config->op,
       MPI_COMM_WORLD);
+  double elapsed_time = MPI_Wtime() - start_time;
 
-  elapsedTime += ( MPI_Wtime() - start );
-  elapsedTime = elapsedTime;
-  check_array_deterministic(weight_diff, weight_count); 
+  if (config->convert_to_datatype == USE_FLOAT) {
+    check_array_deterministic((float*) datatype_array, config->count);
+  } else {
+    float_array = config->convert_from_datatype(datatype_array, config->count);
+    check_array_deterministic((float*) float_array, config->count);
+    free(float_array);
+  }
+  free(datatype_array);
 
-  free(weight_diff);
-  return elapsedTime;
+  return elapsed_time;
 }
 
-double benchmark_allreduce_with_correctness_check_halfPrecision(int weight_count){
-  float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
+// double benchmark_allreduce_with_correctness_check(int weight_count){
 
-  double elapsedTime = 0;
+//   //verified that the time spent in Malloc is trivial compared to Allreduce.
+//   float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
 
-  fill_array_deterministic(weight_diff, weight_count);
-  half* weight_diff_half = vec_float_to_half(weight_diff, weight_count); 
+//   double elapsedTime = 0;
 
-  double start = MPI_Wtime(); //in seconds
+//   fill_array_deterministic(weight_diff, weight_count);
 
-  MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
-      weight_diff_half, //recv
-      weight_count, //count
-      mpi_type_float16, 
-      mpi_fp16sum, //op
-      MPI_COMM_WORLD);
+//   double start = MPI_Wtime(); //in seconds
 
-  elapsedTime += ( MPI_Wtime() - start );
-  elapsedTime = elapsedTime;
+//   MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
+//       weight_diff, //recv
+//       weight_count, //count
+//       MPI_FLOAT, 
+//       mpi_fp32sum, //op
+//       MPI_COMM_WORLD);
 
-  free(weight_diff);
-  weight_diff = vec_half_to_float(weight_diff_half, weight_count);
-  // check_array_deterministic(weight_diff, weight_count); 
+//   elapsedTime += ( MPI_Wtime() - start );
+//   elapsedTime = elapsedTime;
+//   check_array_deterministic(weight_diff, weight_count); 
 
-  free(weight_diff);
-  return elapsedTime;
-}
+//   free(weight_diff);
+//   return elapsedTime;
+// }
+
+// double benchmark_allreduce_with_correctness_check_halfPrecision(int weight_count){
+//   float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
+
+//   double elapsedTime = 0;
+
+//   fill_array_deterministic(weight_diff, weight_count);
+//   half* weight_diff_half = vec_float_to_half(weight_diff, weight_count); 
+
+//   double start = MPI_Wtime(); //in seconds
+
+//   MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
+//       weight_diff_half, //recv
+//       weight_count, //count
+//       mpi_type_float16, 
+//       mpi_fp16sum, //op
+//       MPI_COMM_WORLD);
+
+//   elapsedTime += ( MPI_Wtime() - start );
+//   elapsedTime = elapsedTime;
+
+//   free(weight_diff);
+//   weight_diff = vec_half_to_float(weight_diff_half, weight_count);
+//   // check_array_deterministic(weight_diff, weight_count); 
+
+//   free(weight_diff);
+//   return elapsedTime;
+// }
 
 //@param argv = [(optional) size of data to transfer]
 int main (int argc, char **argv)
@@ -104,28 +145,29 @@ int main (int argc, char **argv)
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+    int count = atoi(argv[1]);
 
-    MPI_Type_contiguous(2, MPI_BYTE, &mpi_type_float16);
-    MPI_Type_commit(&mpi_type_float16);
+    struct config config;
+    MPI_Type_contiguous(2, MPI_BYTE, &config.datatype);
+    MPI_Type_commit(&config.datatype);
+    MPI_Op_create(&my_fp16_sum, 1, &config.op);
+    config.convert_to_datatype = vec_float_to_half;
+    config.convert_from_datatype = vec_half_to_float;
 
-    // create user op (pass function pointer to your user function)
-    int err = MPI_Op_create(&my_fp16_sum, 1, &mpi_fp16sum);
-    MPI_Op_create(&my_fp32_sum, 1, &mpi_fp32sum);
-
-    int weight_count = atoi(argv[1]);
+    config.count = count;
 
     int nRuns = 100;
     double total = 0;
     for (int i=0; i<nRuns; i++) {
-        double elapsedTime = benchmark_allreduce_with_correctness_check(weight_count);
+        double elapsedTime = benchmark_allreduce(&config);
         total += elapsedTime;
         //verified: all ranks get roughly the same elapsedTime.
         if(rank == 0 && i >= 10 && i % 5 == 0)
-            printf("%f M/s \n", (double)weight_count*(i+1)/total/1e6);
+            printf("%f M/s \n", (double)count*(i+1)/total/1e6);
     }
 
-    MPI_Type_free(&mpi_type_float16);
-    MPI_Op_free(&mpi_fp16sum);
+    MPI_Type_free(&config.datatype);
+    MPI_Op_free(&config.op);
 
     MPI_Finalize();
 

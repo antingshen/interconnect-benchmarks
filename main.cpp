@@ -10,6 +10,7 @@ using namespace std;
 using half_float::half;
 
 #define USE_FLOAT NULL
+#define CHECK_CORRECTNESS 0
 
 struct config {
   MPI_Datatype *datatype;
@@ -17,6 +18,7 @@ struct config {
   int count;
   void* (*convert_to_datatype) (float *vec, int len);
   float* (*convert_from_datatype) (void *vec, int len);
+  double elapsed;
 };
 
 void fill_array_deterministic(float* buf, int len){
@@ -30,6 +32,9 @@ void fill_array_deterministic(float* buf, int len){
 }
 
 void check_array_deterministic(float* buf, int len){
+  if (CHECK_CORRECTNESS == 0) {
+    return;
+  }
   int rank, nproc;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nproc);
@@ -82,61 +87,7 @@ double benchmark_allreduce(struct config *config) {
   return elapsed_time;
 }
 
-// double benchmark_allreduce_with_correctness_check(int weight_count){
 
-//   //verified that the time spent in Malloc is trivial compared to Allreduce.
-//   float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
-
-//   double elapsedTime = 0;
-
-//   fill_array_deterministic(weight_diff, weight_count);
-
-//   double start = MPI_Wtime(); //in seconds
-
-//   MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
-//       weight_diff, //recv
-//       weight_count, //count
-//       MPI_FLOAT, 
-//       mpi_fp32sum, //op
-//       MPI_COMM_WORLD);
-
-//   elapsedTime += ( MPI_Wtime() - start );
-//   elapsedTime = elapsedTime;
-//   check_array_deterministic(weight_diff, weight_count); 
-
-//   free(weight_diff);
-//   return elapsedTime;
-// }
-
-// double benchmark_allreduce_with_correctness_check_halfPrecision(int weight_count){
-//   float* weight_diff = (float*)malloc(weight_count * sizeof(float)); //sum all weight diffs here
-
-//   double elapsedTime = 0;
-
-//   fill_array_deterministic(weight_diff, weight_count);
-//   half* weight_diff_half = vec_float_to_half(weight_diff, weight_count); 
-
-//   double start = MPI_Wtime(); //in seconds
-
-//   MPI_Allreduce(MPI_IN_PLACE, //weight_diff_local, //send
-//       weight_diff_half, //recv
-//       weight_count, //count
-//       mpi_type_float16, 
-//       mpi_fp16sum, //op
-//       MPI_COMM_WORLD);
-
-//   elapsedTime += ( MPI_Wtime() - start );
-//   elapsedTime = elapsedTime;
-
-//   free(weight_diff);
-//   weight_diff = vec_half_to_float(weight_diff_half, weight_count);
-//   // check_array_deterministic(weight_diff, weight_count); 
-
-//   free(weight_diff);
-//   return elapsedTime;
-// }
-
-//@param argv = [(optional) size of data to transfer]
 int main (int argc, char **argv)
 {
     int rank, nproc;
@@ -147,33 +98,81 @@ int main (int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     int count = atoi(argv[1]);
 
-    struct config config;
     MPI_Datatype byte_x2;
+    MPI_Datatype mpi_float = MPI_FLOAT;
     MPI_Type_contiguous(2, MPI_BYTE, &byte_x2);
     MPI_Type_commit(&byte_x2);
 
     MPI_Op fp16_halfcpp;
+    MPI_Op fp16_avx;
+    MPI_Op fp32_sum;
+    MPI_Op fp32_avx;
+    MPI_Op nop;
+    MPI_Op mpi_sum = MPI_SUM;
     MPI_Op_create(&my_fp16_sum, 1, &fp16_halfcpp);
+    MPI_Op_create(&my_fp16_sum_avx, 1, &fp16_avx);
+    MPI_Op_create(&my_fp32_sum, 1, &fp32_sum);
+    MPI_Op_create(&my_fp32_sum_avx, 1, &fp32_avx);
+    MPI_Op_create(&my_nop_sum, 1, &nop);
 
-    config.datatype = &byte_x2;
-    config.op = &fp16_halfcpp;
-    config.convert_to_datatype = vec_float_to_half;
-    config.convert_from_datatype = vec_half_to_float;
+    struct config conf_fp32_mpisum;
+    conf_fp32_mpisum.datatype = &mpi_float;
+    conf_fp32_mpisum.op = &mpi_sum;
+    conf_fp32_mpisum.convert_to_datatype = USE_FLOAT;
+    conf_fp32_mpisum.convert_from_datatype = USE_FLOAT;
+    conf_fp32_mpisum.count = count;
+    conf_fp32_mpisum.elapsed = 0;
 
-    config.count = count;
+    struct config conf_fp32_sum = conf_fp32_mpisum;
+    conf_fp32_sum.op = &fp32_sum;
+
+    struct config conf_fp32_avx = conf_fp32_sum;
+    conf_fp32_avx.op = &fp32_avx;
+
+    struct config conf_fp32_nop = conf_fp32_sum;
+    conf_fp32_nop.op = &nop;
+
+    struct config conf_fp16_halfcpp;
+    conf_fp16_halfcpp.datatype = &byte_x2;
+    conf_fp16_halfcpp.op = &fp16_halfcpp;
+    conf_fp16_halfcpp.convert_to_datatype = vec_float_to_half;
+    conf_fp16_halfcpp.convert_from_datatype = vec_half_to_float;
+    conf_fp16_halfcpp.count = count;
+    conf_fp16_halfcpp.elapsed = 0;
+
+    struct config conf_fp16_avx = conf_fp16_halfcpp;
+    conf_fp16_avx.op = &fp16_avx;
+
+    struct config conf_fp16_nop = conf_fp16_halfcpp;
+    conf_fp16_nop.op = &nop;
+
+    struct config configs[] = {
+      conf_fp32_mpisum,
+      conf_fp32_sum,
+      conf_fp32_avx,
+      conf_fp32_nop,
+      conf_fp16_halfcpp,
+      conf_fp16_avx,
+      conf_fp16_nop
+    };
+    int num_configs = 7;
 
     int nRuns = 100;
-    double total = 0;
     for (int i=0; i<nRuns; i++) {
-        double elapsedTime = benchmark_allreduce(&config);
-        total += elapsedTime;
+      if (rank == 0) {
+        printf("--- %d ---\n", i);
+      }
+      for (int c=0; c<num_configs; c++) {
+        configs[c].elapsed += benchmark_allreduce(&configs[c]);
         //verified: all ranks get roughly the same elapsedTime.
-        if(rank == 0 && i >= 10 && i % 5 == 0)
-            printf("%f M/s \n", (double)count*(i+1)/total/1e6);
+        if(rank == 0 && i >= 5 && i % 2 == 0)
+            printf("%f M/s \n", (double)count*(i+1)/configs[c].elapsed/1e6);
+      }
     }
 
     MPI_Type_free(&byte_x2);
     MPI_Op_free(&fp16_halfcpp);
+    MPI_Op_free(&fp16_avx);
 
     MPI_Finalize();
 

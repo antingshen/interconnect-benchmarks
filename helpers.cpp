@@ -78,6 +78,11 @@ void my_fp32_sum_avx(void* invec, void* inoutvec, int *len,
   }
 }
 
+void my_nop_sum(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  return;
+}
+
 
 void* vec_float_to_half(float* vec, int len){
   half* out = (half*)malloc(len * sizeof(half));

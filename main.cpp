@@ -172,8 +172,8 @@ int main (int argc, char **argv)
             printf("%f M/s \n", (double)count*(i+1)/total/1e6);
     }
 
-    MPI_Type_free(&config.datatype);
-    MPI_Op_free(&config.op);
+    MPI_Type_free(&byte_x2);
+    MPI_Op_free(&fp16_halfcpp);
 
     MPI_Finalize();
 

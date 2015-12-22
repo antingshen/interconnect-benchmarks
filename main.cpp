@@ -165,7 +165,7 @@ int main (int argc, char **argv)
       for (int c=0; c<num_configs; c++) {
         configs[c].elapsed += benchmark_allreduce(&configs[c]);
         //verified: all ranks get roughly the same elapsedTime.
-        if(rank == 0 && i >= 5 && i % 2 == 0)
+        if(rank == 0 && i >= 1 && i % 2 == 0)
             printf("%f M/s \n", (double)count*(i+1)/configs[c].elapsed/1e6);
       }
     }

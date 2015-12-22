@@ -83,6 +83,17 @@ void my_nop_sum(void* invec, void* inoutvec, int *len,
   return;
 }
 
+void my_fp32_charsum(void* invec, void* inoutvec, int *len,
+                     MPI_Datatype *datatype) {
+  char *in = (char*)invec;
+  char *inout = (char*)inoutvec;
+  for (int i = 0; i < *len*4; i++) {
+      *inout = *in + *inout; 
+      in++;
+      inout++;
+  }
+}
+
 void my_x32char_sum(void* invec, void* inoutvec, int *len,
                      MPI_Datatype *datatype) {
   char *in = (char*)invec;

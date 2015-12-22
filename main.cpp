@@ -111,6 +111,7 @@ int main (int argc, char **argv)
     MPI_Op fp16_avx;
     MPI_Op fp32_sum;
     MPI_Op fp32_avx;
+    MPI_Op fp32_charsum;
     MPI_Op nop;
     MPI_Op mpi_sum = MPI_SUM;
     MPI_Op x32char_sum;
@@ -119,6 +120,7 @@ int main (int argc, char **argv)
     MPI_Op_create(&my_fp16_sum_avx, 1, &fp16_avx);
     MPI_Op_create(&my_fp32_sum, 1, &fp32_sum);
     MPI_Op_create(&my_fp32_sum_avx, 1, &fp32_avx);
+    MPI_Op_create(&my_fp32_charsum, 1, &fp32_charsum);
     MPI_Op_create(&my_nop_sum, 1, &nop);
     MPI_Op_create(&my_x32char_sum, 1, &x32char_sum);
     MPI_Op_create(&my_x32char_copy, 1, &x32char_copy);
@@ -140,6 +142,9 @@ int main (int argc, char **argv)
 
     struct config conf_fp32_nop = conf_fp32_sum;
     conf_fp32_nop.op = &nop;
+
+    struct config conf_fp32_charsum = conf_fp32_sum;
+    conf_fp32_charsum.op = &fp32_charsum;
 
     //// HALF ////
     struct config conf_fp16_halfcpp;
@@ -185,6 +190,7 @@ int main (int argc, char **argv)
       conf_fp32_sum,
       conf_fp32_avx,
       conf_fp32_nop,
+      conf_fp32_charsum,
       conf_fp16_halfcpp,
       conf_fp16_avx,
       conf_fp16_nop,
@@ -193,7 +199,7 @@ int main (int argc, char **argv)
       conf_x32char_nop,
       conf_x32char_copy
     };
-    int num_configs = 11;
+    int num_configs = 12;
 
     int nRuns = 100;
     for (int i=0; i<nRuns; i++) {

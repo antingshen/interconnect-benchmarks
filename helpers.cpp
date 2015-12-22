@@ -96,13 +96,14 @@ void my_x32char_sum(void* invec, void* inoutvec, int *len,
 
 void my_x32char_copy(void* invec, void* inoutvec, int *len,
                      MPI_Datatype *datatype) {
-  char *in = (char*)invec;
-  char *inout = (char*)inoutvec;
-  for (int i = 0; i < *len*32; i++) {
-      *inout = *in; 
-      in++;
-      inout++;
-  }
+  memcpy(inoutvec, invec, *len*32);
+  // char *in = (char*)invec;
+  // char *inout = (char*)inoutvec;
+  // for (int i = 0; i < *len*32; i++) {
+  //     *inout = *in; 
+  //     in++;
+  //     inout++;
+  // }
 }
 
 

@@ -10,7 +10,7 @@ using namespace std;
 using half_float::half;
 
 #define USE_FLOAT NULL
-#define CHECK_CORRECTNESS 0
+#define CHECK_CORRECTNESS 1
 
 struct config {
   MPI_Datatype *datatype;
@@ -150,12 +150,12 @@ int main (int argc, char **argv)
       conf_fp32_mpisum,
       conf_fp32_sum,
       conf_fp32_avx,
-      conf_fp32_nop,
+      // conf_fp32_nop,
       conf_fp16_halfcpp,
-      conf_fp16_avx,
-      conf_fp16_nop
+      conf_fp16_avx
+      // conf_fp16_nop
     };
-    int num_configs = 7;
+    int num_configs = 5;
 
     int nRuns = 100;
     for (int i=0; i<nRuns; i++) {
